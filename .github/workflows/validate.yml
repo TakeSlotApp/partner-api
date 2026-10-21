@@ -1,0 +1,26 @@
+name: Validate spec
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint OpenAPI with Redocly
+        run: npx @redocly/cli@1.34.5 lint openapi/partner-api.v1.yaml
+
+  breaking-changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Diff against base for breaking changes
+        run: |
+          git show "origin/${{ github.base_ref }}:openapi/partner-api.v1.yaml" > base.yaml 2>/dev/null || exit 0
+          npx oasdiff@latest breaking base.yaml openapi/partner-api.v1.yaml --fail-on ERR

@@ -1,0 +1,568 @@
+openapi: 3.1.0
+info:
+  title: TakeSlot Partner API
+  version: 1.0.0
+  description: >
+    Connect your business to the TakeSlot marketplace: publish your catalog and
+    schedule, release seats, and receive the bookings TakeSlot customers make.
+    TakeSlot handles payment. See the repository README for concepts, auth and
+    webhook verification.
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.takeslot.app/v1
+    description: Production
+security:
+  - bearerAuth: []
+tags:
+  - name: Meta
+  - name: Services
+  - name: Schedule
+  - name: Bookings
+
+paths:
+  /ping:
+    get:
+      tags: [Meta]
+      summary: Liveness check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+  /me:
+    get:
+      tags: [Meta]
+      summary: Identify the business this key maps to
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reference/categories:
+    get:
+      tags: [Meta]
+      summary: Valid service categories
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/StringList' }
+  /reference/formats:
+    get:
+      tags: [Meta]
+      summary: Valid service formats
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/StringList' }
+
+  /services:
+    get:
+      tags: [Services]
+      summary: List services
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - name: active
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Service' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Services]
+      summary: Create or update a service (upsert on external_id)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceInput' }
+      responses:
+        '200':
+          description: Upserted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Service' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /services/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Services]
+      summary: Get a service
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Service' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Services]
+      summary: Update a service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Service' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Services]
+      summary: Archive a service
+      responses:
+        '200':
+          description: Archived
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  archived: { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /schedule:
+    get:
+      tags: [Schedule]
+      summary: List slots
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: service_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Slot' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Schedule]
+      summary: Create or update a slot (upsert on external_id)
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SlotInput' }
+      responses:
+        '200':
+          description: Upserted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slot' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /schedule/bulk:
+    post:
+      tags: [Schedule]
+      summary: Upsert many slots in one call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slots]
+              properties:
+                slots:
+                  type: array
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/SlotInput' }
+      responses:
+        '200':
+          description: Per-row results
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkResult' }
+  /schedule/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Schedule]
+      summary: Get a slot
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slot' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Schedule]
+      summary: Update a slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SlotUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slot' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Schedule]
+      summary: Delete a slot
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  deleted: { type: boolean }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /bookings:
+    get:
+      tags: [Bookings]
+      summary: List bookings (polling fallback for webhooks)
+      parameters:
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - name: status
+          in: query
+          schema: { type: string, enum: [confirmed, cancelled, completed] }
+        - { name: slot_id, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /bookings/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Bookings]
+      summary: Get a booking
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /bookings/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Bookings]
+      summary: Cancel a booking (refunds if paid, notifies the customer)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+webhooks:
+  booking.created:
+    post:
+      summary: A customer booking was confirmed against your released seats
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEvent' }
+      responses:
+        '200': { description: Acknowledged }
+  booking.cancelled:
+    post:
+      summary: A booking was cancelled
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookEvent' }
+      responses:
+        '200': { description: Acknowledged }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: API key created in the TakeSlot dashboard.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string }
+  responses:
+    StringList:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items: { type: string }
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflicting state (e.g. seats below booked)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+    Envelope:
+      type: object
+      properties:
+        data: { type: array, items: {} }
+        meta:
+          type: object
+          properties:
+            next_cursor: { type: [string, 'null'] }
+            has_more: { type: boolean }
+    Me:
+      type: object
+      properties:
+        business:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: [string, 'null'] }
+            slug: { type: [string, 'null'] }
+            timezone: { type: string, example: Europe/Warsaw }
+            currency: { type: string, example: PLN }
+        scopes:
+          type: array
+          items: { type: string }
+    Service:
+      type: object
+      properties:
+        id: { type: string }
+        external_id: { type: [string, 'null'] }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        instructor: { type: [string, 'null'] }
+        format: { type: string, enum: [individual, group] }
+        category:
+          type: string
+          enum: [yoga, pilates, reformer, stretching, massage, personal_training]
+        duration_min: { type: integer }
+        capacity: { type: integer }
+        full_price: { type: integer, description: Minor units (grosze) }
+        currency: { type: string, example: PLN }
+        default_discount_pct: { type: integer }
+        archived: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ServiceInput:
+      type: object
+      required: [external_id, name, format, category, duration_min, capacity, full_price]
+      properties:
+        external_id: { type: string, maxLength: 120 }
+        name: { type: string, minLength: 2, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        instructor: { type: string, maxLength: 120 }
+        format: { type: string, enum: [individual, group] }
+        category:
+          type: string
+          enum: [yoga, pilates, reformer, stretching, massage, personal_training]
+        duration_min: { type: integer, minimum: 5, maximum: 600 }
+        capacity: { type: integer, minimum: 1, maximum: 500 }
+        full_price: { type: integer, minimum: 0 }
+        default_discount_pct: { type: integer, minimum: 0, maximum: 100 }
+    ServiceUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        instructor: { type: string, maxLength: 120 }
+        format: { type: string, enum: [individual, group] }
+        category:
+          type: string
+          enum: [yoga, pilates, reformer, stretching, massage, personal_training]
+        duration_min: { type: integer, minimum: 5, maximum: 600 }
+        capacity: { type: integer, minimum: 1, maximum: 500 }
+        full_price: { type: integer, minimum: 0 }
+        default_discount_pct: { type: integer, minimum: 0, maximum: 100 }
+        archived: { type: boolean }
+    Slot:
+      type: object
+      properties:
+        id: { type: string }
+        external_id: { type: [string, 'null'] }
+        service_id: { type: string }
+        date: { type: string, format: date }
+        start_time: { type: string, example: '18:30' }
+        duration_min: { type: [integer, 'null'] }
+        capacity: { type: integer }
+        released_seats: { type: integer }
+        discount_pct: { type: [integer, 'null'] }
+        instructor: { type: [string, 'null'] }
+        room_name: { type: [string, 'null'] }
+        availability:
+          type: object
+          properties:
+            released: { type: integer }
+            booked: { type: integer }
+            remaining: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SlotInput:
+      type: object
+      required: [external_id, date, start_time, capacity, released_seats]
+      description: Provide either service_id or service_external_id.
+      properties:
+        external_id: { type: string, maxLength: 120 }
+        service_id: { type: string }
+        service_external_id: { type: string, maxLength: 120 }
+        date: { type: string, format: date }
+        start_time: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }
+        duration_min: { type: integer, minimum: 5, maximum: 600 }
+        capacity: { type: integer, minimum: 1, maximum: 500 }
+        released_seats: { type: integer, minimum: 0, maximum: 500 }
+        discount_pct: { type: integer, minimum: 0, maximum: 100 }
+        instructor: { type: string, maxLength: 120 }
+        room_name: { type: string, maxLength: 120 }
+    SlotUpdate:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        start_time: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }
+        duration_min: { type: integer, minimum: 5, maximum: 600 }
+        capacity: { type: integer, minimum: 1, maximum: 500 }
+        released_seats: { type: integer, minimum: 0, maximum: 500 }
+        discount_pct: { type: integer, minimum: 0, maximum: 100 }
+        instructor: { type: string, maxLength: 120 }
+        room_name: { type: string, maxLength: 120 }
+    BulkResult:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            created: { type: integer }
+            updated: { type: integer }
+            failed: { type: integer }
+            total: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              external_id: { type: string }
+              status: { type: string, enum: [created, updated, error] }
+              id: { type: string }
+              error: { $ref: '#/components/schemas/Error' }
+    Booking:
+      type: object
+      description: Privacy-safe projection — first name and a booking code only.
+      properties:
+        id: { type: string }
+        confirmation_code: { type: string, example: A1B2C3 }
+        status: { type: string, enum: [confirmed, cancelled, completed] }
+        customer_first_name: { type: string }
+        slot:
+          type: object
+          properties:
+            id: { type: string }
+            external_id: { type: [string, 'null'] }
+            service_id: { type: string }
+            date: { type: string, format: date }
+            start_time: { type: string }
+        amount: { type: [integer, 'null'], description: Minor units (grosze) }
+        currency: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    WebhookEvent:
+      type: object
+      properties:
+        id: { type: string, example: booking.created.ckxxxxxx }
+        type: { type: string, enum: [booking.created, booking.cancelled] }
+        created_at: { type: string, format: date-time }
+        data: { $ref: '#/components/schemas/Booking' }

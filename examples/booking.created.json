@@ -1,0 +1,22 @@
+{
+  "id": "booking.created.ckv9z1q2a0001xlod8m0nslu9",
+  "type": "booking.created",
+  "created_at": "2026-10-21T17:03:00.100Z",
+  "data": {
+    "id": "ckv9z1q2a0001xlod8m0nslu9",
+    "confirmation_code": "A1B2C3",
+    "status": "confirmed",
+    "customer_first_name": "Marta",
+    "slot": {
+      "id": "cmvictlwm0004xlod4gtk969l",
+      "external_id": "evt-55012",
+      "service_id": "cmvictlsk0002xlod80monslu",
+      "date": "2026-10-25",
+      "start_time": "18:30"
+    },
+    "amount": 2450,
+    "currency": "PLN",
+    "created_at": "2026-10-21T17:03:00.000Z",
+    "updated_at": "2026-10-21T17:03:00.000Z"
+  }
+}
