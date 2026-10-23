@@ -6,6 +6,11 @@ only; anything breaking ships under a new major version.
 
 ## [Unreleased]
 
+### Docs
+
+- Expanded the OpenAPI contract with per-resource and per-operation descriptions and
+  real-world request/response examples throughout (non-breaking; no schema changes).
+
 ### v1 — initial
 
 - Meta: `GET /v1/ping`, `GET /v1/me`, `GET /v1/reference/categories`,
