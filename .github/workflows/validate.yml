@@ -20,7 +20,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Diff against base for breaking changes
+      - name: Extract base spec
+        id: base
         run: |
-          git show "origin/${{ github.base_ref }}:openapi/partner-api.v1.yaml" > base.yaml 2>/dev/null || exit 0
-          npx oasdiff@latest breaking base.yaml openapi/partner-api.v1.yaml --fail-on ERR
+          if git show "origin/${{ github.base_ref }}:openapi/partner-api.v1.yaml" > base.yaml 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Diff against base for breaking changes
+        if: steps.base.outputs.exists == 'true'
+        uses: oasdiff/oasdiff-action/breaking@v0
+        with:
+          base: base.yaml
+          revision: openapi/partner-api.v1.yaml
+          fail-on: ERR
