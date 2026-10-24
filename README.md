@@ -22,13 +22,15 @@ backend, which implements and is tested against this contract.
 | **Schedule** | Publish dated, timed slots and the number of seats you release to TakeSlot. |
 | **Bookings** | Receive bookings via webhooks, reconcile them by polling, and cancel them. |
 
-Setup — creating the business, locations, API keys and webhook endpoints — is done
-in the TakeSlot **dashboard**, not through this API.
+Setup — creating the business and its studios, API keys and webhook endpoints — is
+done in the TakeSlot **dashboard** (Business → Partner API), not through this API.
 
 ## Core concepts
 
-- **Location** — your business. In v1 a location maps 1:1 to the business your API
-  key belongs to.
+- **Business** — the company your API key belongs to. One key covers every studio of
+  the business, including studios added later.
+- **Studio** — a location of your business. Services, slots and bookings each belong to
+  one studio and carry its `studio_id`; `GET /studios` lists them.
 - **Service** — a catalog item (e.g. "Vinyasa Yoga 60 min").
 - **Slot** — a dated, timed instance of a service. `released_seats` is how many
   seats you offer on TakeSlot; it can be lower than the slot's real capacity.
@@ -52,7 +54,7 @@ Authorization: Bearer sk_live_xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 The key is shown once at creation. Every request is scoped to the business the key
-belongs to. Keys carry scopes (`services:read`, `services:write`, `schedule:read`,
+belongs to, and the key can act on all of that business's studios. Keys carry scopes (`services:read`, `services:write`, `schedule:read`,
 `schedule:write`, `bookings:read`, `bookings:write`); a request that needs a scope
 the key lacks returns `403 insufficient_scope`.
 
@@ -62,11 +64,13 @@ the key lacks returns `403 insufficient_scope`.
 BASE=https://api.takeslot.app/v1
 KEY=sk_live_xxx
 
-# 1. Confirm the key
+# 1. Confirm the key and list the studios it can act on
 curl -H "Authorization: Bearer $KEY" $BASE/me
+curl -H "Authorization: Bearer $KEY" $BASE/studios
 
-# 2. Publish a service (upsert on your external_id)
+# 2. Publish a service to a studio (upsert on your external_id, unique per studio)
 curl -X POST $BASE/services -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -d '{
+  "studio_id": "std_mokotow",
   "external_id": "sku-101",
   "name": "Vinyasa Yoga",
   "format": "group",
@@ -79,6 +83,7 @@ curl -X POST $BASE/services -H "Authorization: Bearer $KEY" -H 'Content-Type: ap
 
 # 3. Publish a slot releasing 4 seats to TakeSlot
 curl -X POST $BASE/schedule -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' -d '{
+  "studio_id": "std_mokotow",
   "external_id": "evt-55012",
   "service_external_id": "sku-101",
   "date": "2026-10-25",
@@ -96,8 +101,13 @@ curl -H "Authorization: Bearer $KEY" "$BASE/bookings?since=2026-10-21T00:00:00Z"
 - **JSON** in and out. Money is in **minor units (grosze)**, currency `PLN`
   (`4900` = 49.00 PLN). Slot `date` is `YYYY-MM-DD` and `start_time` is `HH:mm` in
   **Europe/Warsaw**. Other timestamps are ISO 8601 UTC.
-- **Upserts.** `POST /services` and `POST /schedule` upsert on your `external_id`,
-  so re-sending the same id updates the record instead of duplicating it.
+- **Studios.** Pass `studio_id` when creating services and slots. It can be left out
+  while your business has a single studio; with several, omitting it returns
+  `400 studio_required`. A slot created with `service_id` follows its service's studio.
+  List endpoints span all studios and accept `?studio_id=` to narrow to one.
+- **Upserts.** `POST /services` and `POST /schedule` upsert on your `external_id`
+  (unique per studio), so re-sending the same id updates the record instead of
+  duplicating it.
 - **Idempotency.** `POST` requests accept an `Idempotency-Key` header.
 - **Pagination.** List endpoints return `{ "data": [...], "meta": { "next_cursor",
   "has_more" } }`; pass `?limit=` (default 50, max 200) and `?cursor=`.
@@ -107,7 +117,8 @@ curl -H "Authorization: Bearer $KEY" "$BASE/bookings?since=2026-10-21T00:00:00Z"
 
 ## Webhooks
 
-TakeSlot `POST`s signed events to the URL you register in the dashboard:
+TakeSlot `POST`s signed events to the URL you register in the dashboard. An endpoint
+receives events for every studio of your business; `data.studio_id` says which one.
 
 | Event | When |
 | --- | --- |
@@ -123,6 +134,7 @@ Payload:
   "created_at": "2026-10-21T17:03:00.100Z",
   "data": {
     "id": "bk_789",
+    "studio_id": "std_mokotow",
     "confirmation_code": "A1B2C3",
     "status": "confirmed",
     "customer_first_name": "Marta",
@@ -163,7 +175,7 @@ from `GET /bookings?since=`, so you can rely on webhooks, polling, or both.
 ## Repository layout
 
 ```
-openapi/partner-api.v1.yaml   # the contract (OpenAPI 3.1)
+openapi/partner-api.v1.yaml   # the contract (OpenAPI 3.1), generated from the backend
 openapi/components/           # shared schemas
 examples/                     # request/response and webhook samples
 docs/                         # generated reference site
