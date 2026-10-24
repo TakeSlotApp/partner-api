@@ -1,76 +1,108 @@
+# Generated from the TakeSlot backend (apps/api/src/partner-api/openapi.v1.json).
+# Edit there and regenerate, so the served /v1/openapi.json and this file never drift.
 openapi: 3.1.0
 info:
   title: TakeSlot Partner API
   version: 1.0.0
-  description: |
-    Connect your business to the TakeSlot marketplace: publish your catalog and
-    schedule, release seats, and receive the bookings TakeSlot customers make.
-    TakeSlot handles payment — you never touch a card number through this API.
+  description: >
+    Connect your business to the TakeSlot marketplace: publish your catalog and schedule, release
+    seats, and receive the bookings TakeSlot customers make. TakeSlot handles payment — you never
+    touch a card number through this API.
 
     ## How it fits together
 
-    1. **Publish your catalog** — create a `service` for each class or offering
-       (`POST /v1/services`).
-    2. **Publish your schedule** — create dated `slot`s against those services and
-       say how many seats you're releasing to TakeSlot (`POST /v1/schedule`, or
-       `/v1/schedule/bulk` for many at once).
-    3. **Receive bookings** — when a TakeSlot customer books a released seat it's
-       confirmed instantly, with no accept/reject step. TakeSlot emits a
-       `booking.created` webhook, and the booking also shows up in
-       `GET /v1/bookings`.
+    1. **Publish your catalog** — create a `service` for each class or offering (`POST
+    /v1/services`).
 
-    Your own system stays the source of truth for your catalog and schedule.
-    TakeSlot is simply an additional, payout-connected sales channel for the seats
-    you choose to release.
+    2. **Publish your schedule** — create dated `slot`s against those services and say how many
+    seats you're releasing to TakeSlot (`POST /v1/schedule`, or `/v1/schedule/bulk` for many at
+    once).
+
+    3. **Receive bookings** — when a TakeSlot customer books a released seat it's confirmed
+    instantly, with no accept/reject step. TakeSlot emits a `booking.created` webhook, and the
+    booking also shows up in `GET /v1/bookings`.
+
+    Your own system stays the source of truth for your catalog and schedule. TakeSlot is simply an
+    additional, payout-connected sales channel for the seats you choose to release.
 
     ## Authentication
 
     Send your API key as a bearer token:
+
     ```
+
     Authorization: Bearer sk_live_xxxxxxxxxxxxxxxxxxxxxxxx
+
     ```
-    Keys are created and revoked in the TakeSlot dashboard, scoped to a single
-    business — the business is always derived from the key itself, never from a
-    path or query parameter, so a key can only ever read or write its own data.
-    Keys also carry scopes (`services:write`, `schedule:write`, `bookings:read`,
+
+    Keys are created and revoked in the TakeSlot dashboard (Business → Partner API) and belong to a
+    business — the business is always derived from the key itself, never from a path or query
+    parameter, so a key can only ever read or write its own data. One key covers every studio of
+    that business. Keys also carry scopes (`services:write`, `schedule:write`, `bookings:read`,
     `bookings:write`, …); a request needing a scope your key lacks returns `403`.
+
+    ## Multiple studios
+
+    A business can run several studios (locations). `GET /v1/studios` lists them. Services, slots
+    and bookings each belong to one studio and carry its `studio_id`:
+
+    - **Writes** — pass `studio_id` when creating a service or slot. While the business has a single
+    studio you can leave it out; once it has several, a request without it returns `400
+    studio_required`. A slot created with `service_id` simply follows its service's studio.
+
+    - **Reads** — list endpoints return records across all studios; add `?studio_id=` to narrow to
+    one.
+
+    - **`external_id` is unique per studio**, so the same catalog SKU can be published to several
+    studios.
+
+    - **Webhooks** cover every studio of the business; each event's `data.studio_id` says which one.
 
     ## Upserts & `external_id`
 
-    Every service and slot you create is keyed on your own `external_id` as well as
-    on TakeSlot's `id`. `POST /v1/services` and `POST /v1/schedule` are **upserts**:
-    re-sending the same `external_id` with changed fields updates the existing
-    record instead of creating a duplicate. This is the intended way to keep
-    TakeSlot in sync — re-run your full catalog/schedule sync on every change rather
-    than diffing it yourself first.
+    Every service and slot you create is keyed on your own `external_id` (unique per studio) as well
+    as on TakeSlot's `id`. `POST /v1/services` and `POST /v1/schedule` are **upserts**: re-sending
+    the same `external_id` with changed fields updates the existing record instead of creating a
+    duplicate. This is the intended way to keep TakeSlot in sync — re-run your full catalog/schedule
+    sync on every change rather than diffing it yourself first.
 
     ## Idempotency
 
-    `POST` requests accept an `Idempotency-Key` header. Replaying the same key
-    within 24h returns the original result instead of creating a second record —
-    use this when retrying a request after a timeout or network error.
+    `POST` requests accept an `Idempotency-Key` header. Replaying the same key within 24h returns
+    the original result instead of creating a second record — use this when retrying a request after
+    a timeout or network error.
 
     ## Pagination
 
     Collection endpoints return a cursor-paginated envelope:
+
     ```json
-    { "data": [ /* … */ ], "meta": { "next_cursor": "c2_abc", "has_more": true } }
+
+    {
+      "data": [ /* … */ ],
+      "meta": { "next_cursor": "c2_abc", "has_more": true }
+    }
+
     ```
-    Pass the next page's cursor back as `?cursor=`. `limit` defaults to 50 and maxes
-    out at 200. Keep paging while `meta.has_more` is `true`.
+
+    Pass the next page's cursor back as `?cursor=`. `limit` defaults to 50 and maxes out at 200.
+    Keep paging while `meta.has_more` is `true`.
 
     ## Dates, times & money
 
     - Timestamps are ISO 8601 UTC, e.g. `2026-10-21T09:00:00.000Z`.
-    - A slot's `date` (`YYYY-MM-DD`) and `start_time` (`HH:mm`) are both in the
-      **business's own timezone** (see `GET /v1/me`, e.g. `Europe/Warsaw`) — not UTC.
-    - Money is in **minor units** with an ISO currency code, e.g. `4900` + `"PLN"` =
-      49.00 PLN.
+
+    - A slot's `date` (`YYYY-MM-DD`) and `start_time` (`HH:mm`) are both in the **business's own
+    timezone** (see `GET /v1/me`, e.g. `Europe/Warsaw`) — not UTC.
+
+    - Money is in **minor units** with an ISO currency code, e.g. `4900` + `"PLN"` = 49.00 PLN.
 
     ## Errors
 
     Every error has the same shape:
+
     ```json
+
     {
       "error": {
         "code": "seats_below_booked",
@@ -78,30 +110,43 @@ info:
         "details": { "released_seats": 2, "booked": 3 }
       }
     }
+
     ```
-    `400` validation · `401` missing/invalid key · `403` scope/ownership ·
-    `404` not found · `409` conflicting state (e.g. not enough seats left) ·
-    `429` rate limited (see the `Retry-After` header) · `5xx` our fault, safe to retry.
+
+    `400` validation · `401` missing/invalid key · `403` scope/ownership · `404` not found · `409`
+    conflicting state (e.g. not enough seats left) · `429` rate limited (see the `Retry-After`
+    header) · `5xx` our fault, safe to retry.
 
     ## Webhooks
 
-    Register a webhook URL in the dashboard (not via this API). TakeSlot then `POST`s
-    an event there whenever a booking is created or cancelled. Each request carries a
-    `TakeSlot-Signature: t=<unix_ts>,v1=<hex_hmac>` header, where `v1` is
-    `HMAC-SHA256(signing_secret, "{t}.{raw_body}")`. Recompute it over the exact raw
-    request body, compare in constant time, and reject anything whose timestamp is
-    more than a few minutes old. Delivery is **at-least-once** — treat `id` as an
-    idempotency key and ignore repeats. A non-2xx response (or a timeout) is retried
-    with backoff; `GET /v1/bookings?since=` is always available as a safety net if a
-    webhook delivery is ultimately lost, so polling and webhooks can be run together
-    or separately. See the repository README for a worked signature-verification
-    example.
+    Register a webhook URL in the dashboard (not via this API). TakeSlot then `POST`s an event there
+    whenever a booking is created or cancelled:
+
+    ```json
+
+    {
+      "id": "evt_01HXYZ",
+      "type": "booking.created",
+      "created_at": "2026-10-21T17:03:00.100Z",
+      "data": { /* booking object — see the Bookings resource below */ }
+    }
+
+    ```
+
+    Each request carries a `TakeSlot-Signature: t=<unix_ts>,v1=<hex_hmac>` header, where `v1` is
+    `HMAC-SHA256(signing_secret, "{t}.{raw_body}")`. Recompute it over the exact raw request body,
+    compare in constant time, and reject anything whose timestamp is more than a few minutes old.
+    Delivery is **at-least-once** — treat `id` as an idempotency key and ignore repeats. A non-2xx
+    response (or a timeout) is retried with backoff; `GET /v1/bookings?since=` is always available
+    as a safety net if a webhook delivery is ultimately lost, so polling and webhooks can be run
+    together or separately.
 
     ## Privacy
 
-    Partners only ever receive a customer's first name and a confirmation code —
-    never a surname, email, phone number, or payment identifier. This applies
-    identically to webhook payloads and to every `bookings` endpoint.
+    Partners only ever receive a customer's first name and a confirmation code — never a surname,
+    email, phone number, or payment identifier. This applies identically to webhook payloads and to
+    every `bookings` endpoint.
+
   license:
     name: Proprietary
 servers:
@@ -111,160 +156,247 @@ security:
   - bearerAuth: []
 tags:
   - name: Meta
-    description: >
-      Check connectivity, confirm which business your API key belongs to, and look
-      up the valid enum values for `category` and `format`. These are read-only, and
-      most don't require authentication — a good place to start wiring up a new
+    description: Check connectivity, confirm which business your API key belongs to and which studios it
+      can act on, and look up the valid enum values for `category` and `format`. These are
+      read-only, and most don't require authentication — a good place to start wiring up a new
       integration.
   - name: Services
-    description: >
-      A **service** is your reusable catalog template — e.g. "Vinyasa Yoga, 60 min,
-      group, 16 spots". Create services once, then publish dated slots against them
-      (see **Schedule**). `POST /v1/services` is an **upsert keyed on `external_id`**:
-      re-sending the same `external_id` with new field values updates the existing
-      service instead of creating a duplicate, so a partner can safely re-run its
-      full catalog sync every time something changes rather than tracking a diff
-      itself. `DELETE` archives a service (soft delete) — it stops being offered for
-      new slots, but slots and bookings that already reference it are left untouched.
-  - name: Schedule
-    description: >
-      A **slot** is a dated, timed, bookable instance of a service — e.g. "Vinyasa
-      Yoga on 2026-10-25 at 18:30". `released_seats` is how many of that slot's seats
-      you're offering to TakeSlot customers; it can be lower than the slot's total
-      `capacity` if you want to hold some spots back for walk-ins or your own booking
-      channel. `POST /v1/schedule` upserts a single slot keyed on `external_id`;
-      `POST /v1/schedule/bulk` does the same for up to 500 slots in one call — the
-      usual way to push a day's or a week's schedule after a sync in your own system.
-      You can't drop `released_seats` below the number of seats already booked by
-      TakeSlot customers — that returns `409 seats_below_booked`.
-  - name: Bookings
-    description: >
-      Bookings are created by TakeSlot customers against the seats you released —
-      there is **no `POST /v1/bookings`**. When a customer books, TakeSlot confirms it
-      instantly against your inventory, charges them via Stripe, and sends your
-      webhook a `booking.created` event. `GET /v1/bookings` is the polling fallback:
-      use `?since=` to reconcile anything your webhook endpoint might have missed, in
-      addition to or instead of running webhooks. Every booking response is a
-      **privacy-safe projection** — first name and a confirmation code only, never a
-      surname, email, phone number, or payment identifier. `POST /v1/bookings/{id}/cancel`
-      lets you cancel a booking from your side (e.g. the class was cancelled) — it
-      refunds the customer if they paid and sends a `booking.cancelled` webhook.
+    description: >-
+      A **service** is your reusable catalog template — e.g. "Vinyasa Yoga, 60 min, group, 16
+      spots". Create services once, then publish dated slots against them (see **Schedule**).
 
+      `POST /v1/services` is an **upsert keyed on `external_id`** (unique per studio, so the same
+      SKU can exist in several studios): re-sending the same `external_id` with new field values
+      updates the existing service instead of creating a duplicate, so a partner can safely re-run
+      its full catalog sync every time something changes rather than tracking a diff itself.
+
+      `DELETE` archives a service (soft delete) — it stops being offered for new slots, but slots
+      and bookings that already reference it are left untouched.
+  - name: Schedule
+    description: >-
+      A **slot** is a dated, timed, bookable instance of a service — e.g. "Vinyasa Yoga on
+      2026-10-25 at 18:30". `released_seats` is how many of that slot's seats you're offering to
+      TakeSlot customers; it can be lower than the slot's total `capacity` if you want to hold some
+      spots back for walk-ins or your own booking channel.
+
+      `POST /v1/schedule` upserts a single slot keyed on `external_id`; `POST /v1/schedule/bulk`
+      does the same for up to 500 slots in one call — the usual way to push a day's or a week's
+      schedule after a sync in your own system. You can't drop `released_seats` below the number of
+      seats already booked by TakeSlot customers — that returns `409 seats_below_booked`.
+  - name: Bookings
+    description: >-
+      Bookings are created by TakeSlot customers against the seats you released — there is **no
+      `POST /v1/bookings`**. When a customer books, TakeSlot confirms it instantly against your
+      inventory, charges them via Stripe, and sends your webhook a `booking.created` event.
+
+      `GET /v1/bookings` is the polling fallback: use `?since=` to reconcile anything your webhook
+      endpoint might have missed, in addition to or instead of running webhooks. Every booking
+      response is a **privacy-safe projection** — first name and a confirmation code only, never a
+      surname, email, phone number, or payment identifier.
+
+      `POST /v1/bookings/{id}/cancel` lets you cancel a booking from your side (e.g. the class was
+      cancelled) — it refunds the customer if they paid and sends a `booking.cancelled` webhook.
 paths:
   /ping:
     get:
-      tags: [Meta]
+      tags:
+        - Meta
       summary: Liveness check
-      description: >
-        Confirms the API is reachable. No API key required — use this to
-        sanity-check your base URL and network path before you start authenticating
-        requests.
+      description: Confirms the API is reachable. No API key required — use this to sanity-check your base
+        URL and network path before you start authenticating requests.
+
       security: []
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ok: { type: boolean }
-              example: { ok: true }
+                  ok:
+                    type: boolean
+              example:
+                ok: true
   /me:
     get:
-      tags: [Meta]
-      summary: Identify the business this key maps to
-      description: >
-        Returns the business your API key belongs to and the scopes that key carries.
-        Call this first when setting up a new integration, to confirm you're pointed
-        at the right business and that your key has the scopes you expect (e.g.
+      tags:
+        - Meta
+      summary: Identify the business and studios this key maps to
+      description: Returns the business your API key belongs to, every studio it can act on, and the
+        scopes the key carries. Call this first when setting up a new integration, to confirm you're
+        pointed at the right business and that your key has the scopes you expect (e.g.
         `schedule:write`) — a request needing a scope your key lacks returns `403`.
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Me' }
+              schema:
+                $ref: "#/components/schemas/Me"
               example:
                 business:
                   id: biz_123
-                  name: Studio Flow
-                  slug: studio-flow-warszawa
-                  timezone: Europe/Warsaw
-                  currency: PLN
-                scopes: [services:write, schedule:write, bookings:read, bookings:write]
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                  name: Studio Flow sp. z o.o.
+                studios:
+                  - id: std_mokotow
+                    name: Studio Flow Mokotów
+                    slug: studio-flow-mokotow
+                    city: warsaw
+                    address: ul. Puławska 24
+                    timezone: Europe/Warsaw
+                    currency: PLN
+                  - id: std_wola
+                    name: Studio Flow Wola
+                    slug: studio-flow-wola
+                    city: warsaw
+                    address: ul. Wolska 12
+                    timezone: Europe/Warsaw
+                    currency: PLN
+                studio: null
+                scopes:
+                  - services:write
+                  - schedule:write
+                  - bookings:read
+                  - bookings:write
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /studios:
+    get:
+      tags:
+        - Meta
+      summary: List the studios this key can act on
+      description: Every studio of the business your key belongs to, oldest first. A key covers all of
+        them, including studios added later. Pass a studio's `id` as `studio_id` when creating
+        services and slots, and as a `?studio_id=` filter on list endpoints.
+
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Studio"
+              example:
+                data:
+                  - id: std_mokotow
+                    name: Studio Flow Mokotów
+                    slug: studio-flow-mokotow
+                    city: warsaw
+                    address: ul. Puławska 24
+                    timezone: Europe/Warsaw
+                    currency: PLN
+                  - id: std_wola
+                    name: Studio Flow Wola
+                    slug: studio-flow-wola
+                    city: warsaw
+                    address: ul. Wolska 12
+                    timezone: Europe/Warsaw
+                    currency: PLN
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /reference/categories:
     get:
-      tags: [Meta]
+      tags:
+        - Meta
       summary: Valid service categories
-      description: >
-        The fixed set of values accepted as `category` on a service. Validate against
-        this list client-side before calling `POST /v1/services` to avoid `400`
-        responses — new categories may be added over time (additive-only within `v1`).
+      description: The fixed set of values accepted as `category` on a service. Validate against this list
+        client-side before calling `POST /v1/services` to avoid `400` responses — new categories may
+        be added over time (additive-only within `v1`).
       security: []
       responses:
-        '200':
+        "200":
+
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { type: string } }
+                  data:
+                    type: array
+                    items:
+                      type: string
               example:
-                data: [yoga, pilates, reformer, stretching, massage, personal_training]
+                data:
+                  - yoga
+                  - pilates
+                  - reformer
+                  - stretching
+                  - massage
+                  - personal_training
+
   /reference/formats:
     get:
-      tags: [Meta]
+      tags:
+        - Meta
       summary: Valid service formats
-      description: >
-        The fixed set of values accepted as `format` on a service. An `individual`
-        service is always `capacity: 1`; a `group` service can have any capacity up
-        to 500.
+      description: "The fixed set of values accepted as `format` on a service. An `individual` service is
+        always `capacity: 1`; a `group` service can have any capacity up to 500."
       security: []
       responses:
-        '200':
+        "200":
+
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  data: { type: array, items: { type: string } }
+                  data:
+                    type: array
+                    items:
+                      type: string
               example:
-                data: [individual, group]
+                data:
+                  - individual
+                  - group
 
   /services:
     get:
-      tags: [Services]
+      tags:
+        - Services
       summary: List services
-      description: >
-        Lists your catalog, newest first. Use `?active=true` to see only live
-        (non-archived) services, or `?active=false` to see only archived ones — omit
-        it to get both. Paginate with `limit` (max 200, default 50) and `cursor`.
+      description: Lists your catalog, newest first. Use `?active=true` to see only live (non-archived)
+        services, or `?active=false` to see only archived ones — omit it to get both. Paginate with
+        `limit` (max 200, default 50) and `cursor`.
+
       parameters:
-        - { $ref: '#/components/parameters/Limit' }
-        - { $ref: '#/components/parameters/Cursor' }
+        - $ref: "#/components/parameters/StudioId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
         - name: active
           in: query
-          schema: { type: string, enum: ['true', 'false'] }
+          schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/Envelope'
+                  - $ref: "#/components/schemas/Envelope"
                   - type: object
                     properties:
                       data:
                         type: array
-                        items: { $ref: '#/components/schemas/Service' }
+                        items:
+                          $ref: "#/components/schemas/Service"
               example:
                 data:
                   - id: svc_abc
+                    studio_id: std_mokotow
+
                     external_id: studio-sku-101
                     name: Vinyasa Yoga
                     description: All levels, heated room.
@@ -277,29 +409,38 @@ paths:
                     currency: PLN
                     default_discount_pct: 50
                     archived: false
-                    created_at: '2026-10-20T08:00:00.000Z'
-                    updated_at: '2026-10-21T08:00:00.000Z'
-                meta: { next_cursor: null, has_more: false }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                    created_at: 2026-10-20T08:00:00.000Z
+                    updated_at: 2026-10-21T08:00:00.000Z
+                meta:
+                  next_cursor: null
+                  has_more: false
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
     post:
-      tags: [Services]
+      tags:
+        - Services
       summary: Create or update a service (upsert on external_id)
-      description: >
-        Creates a new service, or updates the existing one with the same
-        `external_id` — this is an **upsert**, not a strict create. Re-send the same
-        `external_id` any time its name, price, or capacity changes in your own
-        system; TakeSlot updates the matching record in place instead of creating a
-        duplicate. `category` and `format` must be one of the values from
-        `/v1/reference/*`; `capacity` must be ≥ 1 (and must be exactly 1 for
-        `individual`); `full_price` is in minor units (e.g. grosze for PLN). Pass an
-        `Idempotency-Key` header to safely retry this call after a timeout without
-        risking a double-write.
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      description: Creates a new service, or updates the existing one with the same `external_id` — this
+        is an **upsert**, not a strict create (`external_id` is unique per studio). Re-send the same
+        `external_id` any time its name, price, or capacity changes in your own system; TakeSlot
+        updates the matching record in place instead of creating a duplicate. `category` and
+        `format` must be one of the values from `/v1/reference/*`; `capacity` must be ≥ 1 (and must
+        be exactly 1 for `individual`); `full_price` is in minor units (e.g. grosze for PLN). Pass
+        an `Idempotency-Key` header to safely retry this call after a timeout without risking a
+        double-write. With several studios in the business, pass `studio_id` — leaving it out
+        returns `400 studio_required`, and a studio of another business returns `404
+        studio_not_found`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ServiceInput' }
+            schema:
+              $ref: "#/components/schemas/ServiceInput"
+
             example:
               external_id: studio-sku-101
               name: Vinyasa Yoga
@@ -312,13 +453,16 @@ paths:
               full_price: 4900
               default_discount_pct: 50
       responses:
-        '200':
+        "200":
           description: Upserted
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Service' }
+              schema:
+                $ref: "#/components/schemas/Service"
               example:
                 id: svc_abc
+                studio_id: std_mokotow
+
                 external_id: studio-sku-101
                 name: Vinyasa Yoga
                 description: All levels, heated room.
@@ -331,26 +475,34 @@ paths:
                 currency: PLN
                 default_discount_pct: 50
                 archived: false
-                created_at: '2026-10-20T08:00:00.000Z'
-                updated_at: '2026-10-21T08:00:00.000Z'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                created_at: 2026-10-20T08:00:00.000Z
+                updated_at: 2026-10-21T08:00:00.000Z
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /services/{id}:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
+    parameters:
+      - $ref: "#/components/parameters/Id"
     get:
-      tags: [Services]
+      tags:
+        - Services
       summary: Get a service
-      description: >
-        Fetches a single service by its TakeSlot `id` (the `id` field returned from
-        `POST`/`GET /v1/services`, not your own `external_id`).
+      description: Fetches a single service by its TakeSlot `id` (the `id` field returned from `POST`/`GET
+        /v1/services`, not your own `external_id`).
+
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Service' }
+              schema:
+                $ref: "#/components/schemas/Service"
               example:
                 id: svc_abc
+                studio_id: std_mokotow
+
                 external_id: studio-sku-101
                 name: Vinyasa Yoga
                 description: All levels, heated room.
@@ -363,32 +515,40 @@ paths:
                 currency: PLN
                 default_discount_pct: 50
                 archived: false
-                created_at: '2026-10-20T08:00:00.000Z'
-                updated_at: '2026-10-21T08:00:00.000Z'
-        '404': { $ref: '#/components/responses/NotFound' }
+                created_at: 2026-10-20T08:00:00.000Z
+                updated_at: 2026-10-21T08:00:00.000Z
+        "404":
+          $ref: "#/components/responses/NotFound"
+
     patch:
-      tags: [Services]
+      tags:
+        - Services
       summary: Update a service
-      description: >
-        Partially updates a service by its TakeSlot `id`. Send only the fields you
-        want to change — anything omitted is left as-is. To archive the service
-        instead, set `archived: true`, or use `DELETE`.
+      description: "Partially updates a service by its TakeSlot `id`. Send only the fields you want to
+        change — anything omitted is left as-is. To archive the service instead, set `archived:
+        true`, or use `DELETE`."
+
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ServiceUpdate' }
+            schema:
+              $ref: "#/components/schemas/ServiceUpdate"
+
             example:
               full_price: 5400
               default_discount_pct: 40
       responses:
-        '200':
+        "200":
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Service' }
+              schema:
+                $ref: "#/components/schemas/Service"
               example:
                 id: svc_abc
+                studio_id: std_mokotow
+
                 external_id: studio-sku-101
                 name: Vinyasa Yoga
                 description: All levels, heated room.
@@ -401,99 +561,136 @@ paths:
                 currency: PLN
                 default_discount_pct: 40
                 archived: false
-                created_at: '2026-10-20T08:00:00.000Z'
-                updated_at: '2026-10-22T10:15:00.000Z'
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+                created_at: 2026-10-20T08:00:00.000Z
+                updated_at: 2026-10-22T10:15:00.000Z
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
     delete:
-      tags: [Services]
+      tags:
+        - Services
       summary: Archive a service
-      description: >
-        Archives the service (soft delete) — it stops being offered for new slots, but
-        slots and bookings that already reference it are retained untouched. This is
-        reversible: `PATCH` the same service with `archived: false` to bring it back.
+      description: "Archives the service (soft delete) — it stops being offered for new slots, but slots
+        and bookings that already reference it are retained untouched. This is reversible: `PATCH`
+        the same service with `archived: false` to bring it back."
+
       responses:
-        '200':
+        "200":
           description: Archived
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  id: { type: string }
-                  archived: { type: boolean }
-              example: { id: svc_abc, archived: true }
-        '404': { $ref: '#/components/responses/NotFound' }
+                  id:
+                    type: string
+                  archived:
+                    type: boolean
+              example:
+                id: svc_abc
+                archived: true
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /schedule:
     get:
-      tags: [Schedule]
+      tags:
+        - Schedule
       summary: List slots
-      description: >
-        Lists slots. Use `from`/`to` (calendar dates) to scope to a date range —
-        recommended for anything beyond a few days of data — and `service_id` to
-        filter to one service's slots. Each slot's `availability` block tells you how
-        many of its released seats are still free
+      description: Lists slots. Use `from`/`to` (calendar dates) to scope to a date range — recommended
+        for anything beyond a few days of data — and `service_id` to filter to one service's slots.
+        Each slot's `availability` block tells you how many of its released seats are still free
+
         (`availability.remaining = availability.released - availability.booked`).
       parameters:
-        - { $ref: '#/components/parameters/Limit' }
-        - { $ref: '#/components/parameters/Cursor' }
-        - { name: from, in: query, schema: { type: string, format: date } }
-        - { name: to, in: query, schema: { type: string, format: date } }
-        - { name: service_id, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/StudioId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: service_id
+          in: query
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/Envelope'
+                  - $ref: "#/components/schemas/Envelope"
                   - type: object
                     properties:
                       data:
                         type: array
-                        items: { $ref: '#/components/schemas/Slot' }
+                        items:
+                          $ref: "#/components/schemas/Slot"
               example:
                 data:
                   - id: slot_xyz
+                    studio_id: std_mokotow
                     external_id: studio-event-55012
                     service_id: svc_abc
-                    date: '2026-10-25'
-                    start_time: '18:30'
+                    date: 2026-10-25
+                    start_time: 18:30
+
                     duration_min: 60
                     capacity: 16
                     released_seats: 4
                     discount_pct: 50
                     instructor: Anna K.
                     room_name: Studio 2
-                    availability: { released: 4, booked: 1, remaining: 3 }
-                    created_at: '2026-10-21T08:00:00.000Z'
-                    updated_at: '2026-10-21T08:00:00.000Z'
-                meta: { next_cursor: c2_abc, has_more: true }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                    availability:
+                      released: 4
+                      booked: 1
+                      remaining: 3
+                    created_at: 2026-10-21T08:00:00.000Z
+                    updated_at: 2026-10-21T08:00:00.000Z
+                meta:
+                  next_cursor: c2_abc
+                  has_more: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
     post:
-      tags: [Schedule]
+      tags:
+        - Schedule
       summary: Create or update a slot (upsert on external_id)
-      description: >
-        Creates a new slot, or updates the existing one with the same `external_id` —
-        this is an **upsert**. Reference the parent service with either `service_id`
-        or `service_external_id` (not both). `released_seats` must be ≤ `capacity`,
-        and a `PATCH`/upsert may not drop `released_seats` below the number of seats
-        already booked by TakeSlot customers — that returns `409 seats_below_booked`.
-        `date` + `start_time` are interpreted in the business's own timezone (see
-        `GET /v1/me`).
-      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      description: Creates a new slot, or updates the existing one with the same `external_id` — this is
+        an **upsert**. Reference the parent service with either `service_id` or
+        `service_external_id` (not both). `released_seats` must be ≤ `capacity`, and a
+        `PATCH`/upsert may not drop `released_seats` below the number of seats already booked by
+        TakeSlot customers — that returns `409 seats_below_booked`. `date` + `start_time` are
+        interpreted in the business's own timezone (see `GET /v1/me`). The slot is created in the
+        studio of its `service_id`; with `service_external_id`, the studio comes from `studio_id`
+        (required when the business has several studios). A `studio_id` that doesn't match the
+        service's studio returns `400 studio_mismatch`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SlotInput' }
+            schema:
+              $ref: "#/components/schemas/SlotInput"
             example:
               external_id: studio-event-55012
-              service_external_id: studio-sku-101
-              date: '2026-10-25'
-              start_time: '18:30'
+              service_id: svc_abc
+              date: 2026-10-25
+              start_time: 18:30
+
               duration_min: 60
               capacity: 16
               released_seats: 4
@@ -501,218 +698,291 @@ paths:
               instructor: Anna K.
               room_name: Studio 2
       responses:
-        '200':
+        "200":
           description: Upserted
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Slot' }
+              schema:
+                $ref: "#/components/schemas/Slot"
               example:
                 id: slot_xyz
+                studio_id: std_mokotow
                 external_id: studio-event-55012
                 service_id: svc_abc
-                date: '2026-10-25'
-                start_time: '18:30'
+                date: 2026-10-25
+                start_time: 18:30
+
                 duration_min: 60
                 capacity: 16
                 released_seats: 4
                 discount_pct: 50
                 instructor: Anna K.
                 room_name: Studio 2
-                availability: { released: 4, booked: 0, remaining: 4 }
-                created_at: '2026-10-21T08:00:00.000Z'
-                updated_at: '2026-10-21T08:00:00.000Z'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '409':
+                availability:
+                  released: 4
+                  booked: 0
+                  remaining: 4
+                created_at: 2026-10-21T08:00:00.000Z
+                updated_at: 2026-10-21T08:00:00.000Z
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
           description: Conflicting state — e.g. `released_seats` is lower than the seats already booked
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema:
+                $ref: "#/components/schemas/Error"
+
               example:
                 error:
                   code: seats_below_booked
                   message: releasedSeats (2) cannot be lower than already-booked seats (3).
-                  details: { released_seats: 2, booked: 3 }
+                  details:
+                    released_seats: 2
+                    booked: 3
+
   /schedule/bulk:
     post:
-      tags: [Schedule]
+      tags:
+        - Schedule
       summary: Upsert many slots in one call
-      description: >
-        Upserts up to 500 slots in a single call — the usual way to push a whole
-        day's or week's schedule after a sync in your own system. Each row is upserted
-        independently and keyed on its own `external_id`: one row failing validation
-        does not roll back the others. Inspect `results[].status`
-        (`created` / `updated` / `error`) to see which rows succeeded and which need
-        attention.
+      description: "Upserts up to 500 slots in a single call — the usual way to push a whole day's or
+        week's schedule after a sync in your own system. Each row is upserted independently and
+        keyed on its own `external_id`: one row failing validation does not roll back the others.
+        Inspect `results[].status` (`created` / `updated` / `error`) to see which rows succeeded and
+        which need attention. Each slot carries its own `studio_id`, so one call can update several
+        studios."
+
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [slots]
+              required:
+                - slots
               properties:
                 slots:
                   type: array
                   maxItems: 500
-                  items: { $ref: '#/components/schemas/SlotInput' }
+                  items:
+                    $ref: "#/components/schemas/SlotInput"
             example:
               slots:
                 - external_id: studio-event-55012
-                  service_external_id: studio-sku-101
-                  date: '2026-10-25'
-                  start_time: '18:30'
+                  service_id: svc_abc
+                  date: 2026-10-25
+                  start_time: 18:30
                   capacity: 16
                   released_seats: 4
                 - external_id: studio-event-55013
-                  service_external_id: studio-sku-101
-                  date: '2026-10-26'
-                  start_time: '07:00'
+                  service_id: svc_abc
+                  date: 2026-10-26
+                  start_time: 07:00
+
                   capacity: 16
                   released_seats: 6
       responses:
-        '200':
+        "200":
           description: Per-row results
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/BulkResult' }
+              schema:
+                $ref: "#/components/schemas/BulkResult"
               example:
-                summary: { created: 1, updated: 1, failed: 0, total: 2 }
+                summary:
+                  created: 1
+                  updated: 1
+                  failed: 0
+                  total: 2
                 results:
-                  - { external_id: studio-event-55012, status: updated, id: slot_xyz }
-                  - { external_id: studio-event-55013, status: created, id: slot_pqr }
+                  - external_id: studio-event-55012
+                    status: updated
+                    id: slot_xyz
+                  - external_id: studio-event-55013
+                    status: created
+                    id: slot_pqr
+
   /schedule/{id}:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
+    parameters:
+      - $ref: "#/components/parameters/Id"
     get:
-      tags: [Schedule]
+      tags:
+        - Schedule
       summary: Get a slot
       description: Fetches a single slot by its TakeSlot `id`.
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Slot' }
+              schema:
+                $ref: "#/components/schemas/Slot"
               example:
                 id: slot_xyz
+                studio_id: std_mokotow
                 external_id: studio-event-55012
                 service_id: svc_abc
-                date: '2026-10-25'
-                start_time: '18:30'
+                date: 2026-10-25
+                start_time: 18:30
+
                 duration_min: 60
                 capacity: 16
                 released_seats: 4
                 discount_pct: 50
                 instructor: Anna K.
                 room_name: Studio 2
-                availability: { released: 4, booked: 1, remaining: 3 }
-                created_at: '2026-10-21T08:00:00.000Z'
-                updated_at: '2026-10-21T08:00:00.000Z'
-        '404': { $ref: '#/components/responses/NotFound' }
+                availability:
+                  released: 4
+                  booked: 1
+                  remaining: 3
+                created_at: 2026-10-21T08:00:00.000Z
+                updated_at: 2026-10-21T08:00:00.000Z
+        "404":
+          $ref: "#/components/responses/NotFound"
+
     patch:
-      tags: [Schedule]
+      tags:
+        - Schedule
       summary: Update a slot
-      description: >
-        Partially updates a slot — e.g. to raise or lower `released_seats` as you free
-        up or fill capacity on your own booking system. Only send the fields you want
-        to change. Lowering `released_seats` below the number of seats already booked
-        returns `409 seats_below_booked`.
+      description: Partially updates a slot — e.g. to raise or lower `released_seats` as you free up or
+        fill capacity on your own booking system. Only send the fields you want to change. Lowering
+        `released_seats` below the number of seats already booked returns `409 seats_below_booked`.
+
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SlotUpdate' }
+            schema:
+              $ref: "#/components/schemas/SlotUpdate"
+
             example:
               released_seats: 6
       responses:
-        '200':
+        "200":
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Slot' }
+              schema:
+                $ref: "#/components/schemas/Slot"
               example:
                 id: slot_xyz
+                studio_id: std_mokotow
                 external_id: studio-event-55012
                 service_id: svc_abc
-                date: '2026-10-25'
-                start_time: '18:30'
+                date: 2026-10-25
+                start_time: 18:30
+
                 duration_min: 60
                 capacity: 16
                 released_seats: 6
                 discount_pct: 50
                 instructor: Anna K.
                 room_name: Studio 2
-                availability: { released: 6, booked: 1, remaining: 5 }
-                created_at: '2026-10-21T08:00:00.000Z'
-                updated_at: '2026-10-22T09:00:00.000Z'
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409':
+                availability:
+                  released: 6
+                  booked: 1
+                  remaining: 5
+                created_at: 2026-10-21T08:00:00.000Z
+                updated_at: 2026-10-22T09:00:00.000Z
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
           description: Conflicting state — e.g. `released_seats` is lower than the seats already booked
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema:
+                $ref: "#/components/schemas/Error"
+
               example:
                 error:
                   code: seats_below_booked
                   message: releasedSeats (2) cannot be lower than already-booked seats (3).
-                  details: { released_seats: 2, booked: 3 }
+                  details:
+                    released_seats: 2
+                    booked: 3
+
     delete:
-      tags: [Schedule]
+      tags:
+        - Schedule
       summary: Delete a slot
-      description: >
-        Deletes the slot. If it has active TakeSlot bookings, deleting it **cancels
-        those bookings**: each is refunded (if paid), the customer is notified, and a
-        `booking.cancelled` webhook is sent for every one of them. Use this when a
-        class is cancelled entirely rather than just losing a few seats.
+      description: "Deletes the slot. If it has active TakeSlot bookings, deleting it **cancels those
+        bookings**: each is refunded (if paid), the customer is notified, and a `booking.cancelled`
+        webhook is sent for every one of them. Use this when a class is cancelled entirely rather
+        than just losing a few seats."
+
       responses:
-        '200':
+        "200":
           description: Deleted
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  id: { type: string }
-                  deleted: { type: boolean }
-              example: { id: slot_xyz, deleted: true }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+                  id:
+                    type: string
+                  deleted:
+                    type: boolean
+              example:
+                id: slot_xyz
+                deleted: true
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /bookings:
     get:
-      tags: [Bookings]
+      tags:
+        - Bookings
       summary: List bookings (polling fallback for webhooks)
-      description: >
-        Lists bookings. Use `?since=<ISO timestamp>` to poll for anything created or
-        updated after your last check — this is the **recommended fallback** for when
-        a `booking.created`/`booking.cancelled` webhook delivery might have failed, and
-        can be run on a schedule (e.g. every few minutes) alongside webhooks. Filter
-        with `status` (`confirmed` / `cancelled` / `completed`) or `slot_id`. Every
-        booking in the response is the privacy-safe projection: first name and
-        confirmation code only.
+      description: "Lists bookings. Use `?since=<ISO timestamp>` to poll for anything created or updated
+        after your last check — this is the **recommended fallback** for when a
+        `booking.created`/`booking.cancelled` webhook delivery might have failed, and can be run on
+        a schedule (e.g. every few minutes) alongside webhooks. Filter with `status` (`confirmed` /
+        `cancelled` / `completed`) or `slot_id`. Every booking in the response is the privacy-safe
+        projection: first name and confirmation code only."
+
       parameters:
-        - { $ref: '#/components/parameters/Limit' }
-        - { $ref: '#/components/parameters/Cursor' }
-        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - $ref: "#/components/parameters/StudioId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
         - name: status
           in: query
-          schema: { type: string, enum: [confirmed, cancelled, completed] }
-        - { name: slot_id, in: query, schema: { type: string } }
+          schema:
+            type: string
+            enum:
+              - confirmed
+              - cancelled
+              - completed
+        - name: slot_id
+          in: query
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/Envelope'
+                  - $ref: "#/components/schemas/Envelope"
                   - type: object
                     properties:
                       data:
                         type: array
-                        items: { $ref: '#/components/schemas/Booking' }
+                        items:
+                          $ref: "#/components/schemas/Booking"
               example:
                 data:
                   - id: bk_789
+                    studio_id: std_mokotow
+
                     confirmation_code: A1B2C3
                     status: confirmed
                     customer_first_name: Marta
@@ -720,30 +990,39 @@ paths:
                       id: slot_xyz
                       external_id: studio-event-55012
                       service_id: svc_abc
-                      date: '2026-10-25'
-                      start_time: '18:30'
+                      date: 2026-10-25
+                      start_time: 18:30
                     amount: 2450
                     currency: PLN
-                    created_at: '2026-10-21T17:03:00.000Z'
-                    updated_at: '2026-10-21T17:03:00.000Z'
-                meta: { next_cursor: null, has_more: false }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                    created_at: 2026-10-21T17:03:00.000Z
+                    updated_at: 2026-10-21T17:03:00.000Z
+                meta:
+                  next_cursor: null
+                  has_more: false
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /bookings/{id}:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
+    parameters:
+      - $ref: "#/components/parameters/Id"
     get:
-      tags: [Bookings]
+      tags:
+        - Bookings
       summary: Get a booking
-      description: >
-        Fetches a single booking by its TakeSlot `id` — e.g. the `id` you received in
-        a `booking.created` webhook payload, to look up its current status.
+      description: Fetches a single booking by its TakeSlot `id` — e.g. the `id` you received in a
+        `booking.created` webhook payload, to look up its current status.
+
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Booking' }
+              schema:
+                $ref: "#/components/schemas/Booking"
               example:
                 id: bk_789
+                studio_id: std_mokotow
+
                 confirmation_code: A1B2C3
                 status: confirmed
                 customer_first_name: Marta
@@ -751,24 +1030,28 @@ paths:
                   id: slot_xyz
                   external_id: studio-event-55012
                   service_id: svc_abc
-                  date: '2026-10-25'
-                  start_time: '18:30'
+                  date: 2026-10-25
+                  start_time: 18:30
                 amount: 2450
                 currency: PLN
-                created_at: '2026-10-21T17:03:00.000Z'
-                updated_at: '2026-10-21T17:03:00.000Z'
-        '404': { $ref: '#/components/responses/NotFound' }
+                created_at: 2026-10-21T17:03:00.000Z
+                updated_at: 2026-10-21T17:03:00.000Z
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /bookings/{id}/cancel:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
+    parameters:
+      - $ref: "#/components/parameters/Id"
     post:
-      tags: [Bookings]
+      tags:
+        - Bookings
       summary: Cancel a booking (refunds if paid, notifies the customer)
-      description: >
-        Cancels a booking from your side — e.g. the class or studio is closed that
-        day. If the customer paid, they're refunded automatically; they're notified by
-        TakeSlot, and a `booking.cancelled` webhook is sent. The slot's
-        `availability.remaining` count is freed up for other customers. Pass an
-        optional `reason` for your own records — it isn't shown to the customer.
+      description: Cancels a booking from your side — e.g. the class or studio is closed that day. If the
+        customer paid, they're refunded automatically; they're notified by TakeSlot, and a
+        `booking.cancelled` webhook is sent. The slot's `availability.remaining` count is freed up
+        for other customers. Pass an optional `reason` for your own records — it isn't shown to the
+        customer.
+
       requestBody:
         required: false
         content:
@@ -776,17 +1059,23 @@ paths:
             schema:
               type: object
               properties:
-                reason: { type: string, maxLength: 200 }
+                reason:
+                  type: string
+                  maxLength: 200
+
             example:
               reason: studio_closure
       responses:
-        '200':
+        "200":
           description: Cancelled
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Booking' }
+              schema:
+                $ref: "#/components/schemas/Booking"
               example:
                 id: bk_789
+                studio_id: std_mokotow
+
                 confirmation_code: A1B2C3
                 status: cancelled
                 customer_first_name: Marta
@@ -794,34 +1083,35 @@ paths:
                   id: slot_xyz
                   external_id: studio-event-55012
                   service_id: svc_abc
-                  date: '2026-10-25'
-                  start_time: '18:30'
+                  date: 2026-10-25
+                  start_time: 18:30
                 amount: 2450
                 currency: PLN
-                created_at: '2026-10-21T17:03:00.000Z'
-                updated_at: '2026-10-22T09:10:00.000Z'
-        '404': { $ref: '#/components/responses/NotFound' }
+                created_at: 2026-10-21T17:03:00.000Z
+                updated_at: 2026-10-22T09:10:00.000Z
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 webhooks:
   booking.created:
     post:
       summary: A customer booking was confirmed against your released seats
-      description: >
-        Sent the instant a TakeSlot customer books one of your released seats. There
-        is no accept/reject step — by the time you receive this, the booking is already
-        confirmed and (if paid) charged. Decrement your own availability accordingly,
-        or just trust `GET /v1/schedule` for the current `availability.remaining`.
-        Verify the `TakeSlot-Signature` header before trusting the payload (see the API
-        overview), and treat `id` as an idempotency key since delivery is
-        at-least-once.
+      description: Sent the instant a TakeSlot customer books one of your released seats. There is no
+        accept/reject step — by the time you receive this, the booking is already confirmed and (if
+        paid) charged. Decrement your own availability accordingly, or just trust `GET /v1/schedule`
+        for the current `availability.remaining`. Verify the `TakeSlot-Signature` header before
+        trusting the payload (see the API overview), and treat `id` as an idempotency key since
+        delivery is at-least-once.
       requestBody:
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WebhookEvent' }
+            schema:
+              $ref: "#/components/schemas/WebhookEvent"
             example:
               id: evt_01HXYZ
               type: booking.created
-              created_at: '2026-10-21T17:03:00.100Z'
+              created_at: 2026-10-21T17:03:00.100Z
+
               data:
                 id: bk_789
                 confirmation_code: A1B2C3
@@ -831,31 +1121,34 @@ webhooks:
                   id: slot_xyz
                   external_id: studio-event-55012
                   service_id: svc_abc
-                  date: '2026-10-25'
-                  start_time: '18:30'
+                  date: 2026-10-25
+                  start_time: 18:30
                 amount: 2450
                 currency: PLN
-                created_at: '2026-10-21T17:03:00.000Z'
-                updated_at: '2026-10-21T17:03:00.000Z'
+                created_at: 2026-10-21T17:03:00.000Z
+                updated_at: 2026-10-21T17:03:00.000Z
+
       responses:
-        '200': { description: Acknowledged }
+        "200":
+          description: Acknowledged
   booking.cancelled:
     post:
       summary: A booking was cancelled
-      description: >
-        Sent when a booking is cancelled — by the customer, by you via
-        `POST /v1/bookings/{id}/cancel`, or indirectly via `DELETE /v1/schedule/{id}`
-        on its slot. `data.status` is `cancelled`. Free up the seat in your own system
-        if you were tracking it locally; `availability.remaining` on the slot reflects
-        this immediately via `GET /v1/schedule`.
+      description: Sent when a booking is cancelled — by the customer, by you via `POST
+        /v1/bookings/{id}/cancel`, or indirectly via `DELETE /v1/schedule/{id}` on its slot.
+        `data.status` is `cancelled`. Free up the seat in your own system if you were tracking it
+        locally; `availability.remaining` on the slot reflects this immediately via `GET
+        /v1/schedule`.
       requestBody:
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WebhookEvent' }
+            schema:
+              $ref: "#/components/schemas/WebhookEvent"
             example:
               id: evt_01HXYA
               type: booking.cancelled
-              created_at: '2026-10-22T09:10:00.200Z'
+              created_at: 2026-10-22T09:10:00.200Z
+
               data:
                 id: bk_789
                 confirmation_code: A1B2C3
@@ -865,15 +1158,16 @@ webhooks:
                   id: slot_xyz
                   external_id: studio-event-55012
                   service_id: svc_abc
-                  date: '2026-10-25'
-                  start_time: '18:30'
+                  date: 2026-10-25
+                  start_time: 18:30
                 amount: 2450
                 currency: PLN
-                created_at: '2026-10-21T17:03:00.000Z'
-                updated_at: '2026-10-22T09:10:00.000Z'
-      responses:
-        '200': { description: Acknowledged }
+                created_at: 2026-10-21T17:03:00.000Z
+                updated_at: 2026-10-22T09:10:00.000Z
 
+      responses:
+        "200":
+          description: Acknowledged
 components:
   securitySchemes:
     bearerAuth:
@@ -885,54 +1179,97 @@ components:
       name: id
       in: path
       required: true
-      schema: { type: string }
+      schema:
+        type: string
     Limit:
       name: limit
       in: query
-      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
     Cursor:
       name: cursor
       in: query
-      schema: { type: string }
+      schema:
+        type: string
     IdempotencyKey:
       name: Idempotency-Key
       in: header
-      schema: { type: string }
+      schema:
+        type: string
+    StudioId:
+      name: studio_id
+      in: query
+      required: false
+      description: Only return records of this studio. Omit to list across every studio of the business.
+      schema:
+        type: string
   responses:
+    StringList:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items:
+                  type: string
+
     Unauthorized:
       description: Missing or invalid API key
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            $ref: "#/components/schemas/Error"
           example:
-            error: { code: unauthorized, message: Missing or invalid API key. }
+            error:
+              code: unauthorized
+              message: Missing or invalid API key.
+
     BadRequest:
       description: Validation error
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            $ref: "#/components/schemas/Error"
+
           example:
             error:
               code: validation_error
               message: capacity must not be less than 1.
-              details: { field: capacity }
+              details:
+                field: capacity
+
     NotFound:
       description: Resource not found
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            $ref: "#/components/schemas/Error"
           example:
-            error: { code: not_found, message: No resource with that id for this business. }
+            error:
+              code: not_found
+              message: No resource with that id for this business.
+
     Conflict:
       description: Conflicting state (e.g. seats below booked)
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            $ref: "#/components/schemas/Error"
+
           example:
             error:
               code: seats_below_booked
               message: releasedSeats (2) cannot be lower than already-booked seats (3).
-              details: { released_seats: 2, booked: 3 }
+              details:
+                released_seats: 2
+                booked: 3
+
   schemas:
     Error:
       type: object
@@ -940,195 +1277,647 @@ components:
       properties:
         error:
           type: object
-          required: [code, message]
+          required:
+            - code
+            - message
           properties:
-            code: { type: string, example: seats_below_booked }
+            code:
+              type: string
+              example: seats_below_booked
             message:
               type: string
               example: releasedSeats (2) cannot be lower than already-booked seats (3).
-            details: { type: object, additionalProperties: true }
+            details:
+              type: object
+              additionalProperties: true
+      example:
+        error:
+          code: seats_below_booked
+          message: releasedSeats (2) cannot be lower than already-booked seats (3).
+          details:
+            released_seats: 2
+            booked: 3
     Envelope:
       type: object
-      description: >
-        The cursor-paginated wrapper every list endpoint returns. Keep paging with
+      description: The cursor-paginated wrapper every list endpoint returns. Keep paging with
+
         `?cursor=meta.next_cursor` while `meta.has_more` is `true`.
       properties:
-        data: { type: array, items: {} }
+        data:
+          type: array
+          items: {}
         meta:
           type: object
           properties:
-            next_cursor: { type: [string, 'null'] }
-            has_more: { type: boolean }
+            next_cursor:
+              type:
+                - string
+                - "null"
+            has_more:
+              type: boolean
     Me:
       type: object
-      description: The business your API key belongs to, plus the scopes that key carries.
+      description: The business your API key belongs to, every studio the key can act on, and the key's scopes.
+
       properties:
         business:
           type: object
           properties:
-            id: { type: string }
-            name: { type: [string, 'null'] }
-            slug: { type: [string, 'null'] }
-            timezone: { type: string, example: Europe/Warsaw }
-            currency: { type: string, example: PLN }
+            id:
+              type: string
+            name:
+              type:
+                - string
+                - "null"
+        studios:
+          type: array
+          items:
+            $ref: "#/components/schemas/Studio"
+        studio:
+          deprecated: true
+          description: The business's only studio, or `null` when it has several. Kept for single-studio
+            integrations; use `studios`.
+          oneOf:
+            - $ref: "#/components/schemas/Studio"
+            - type: "null"
         scopes:
           type: array
-          items: { type: string }
+          items:
+            type: string
+      example:
+        business:
+          id: biz_123
+          name: Studio Flow sp. z o.o.
+        studios:
+          - id: std_mokotow
+            name: Studio Flow Mokotów
+            slug: studio-flow-mokotow
+            city: warsaw
+            address: ul. Puławska 24
+            timezone: Europe/Warsaw
+            currency: PLN
+          - id: std_wola
+            name: Studio Flow Wola
+            slug: studio-flow-wola
+            city: warsaw
+            address: ul. Wolska 12
+            timezone: Europe/Warsaw
+            currency: PLN
+        studio: null
+        scopes:
+          - services:write
+          - schedule:write
+          - bookings:read
+          - bookings:write
     Service:
       type: object
-      description: >
-        Your catalog template — a class or offering that slots are scheduled against.
+      description: Your catalog template — a class or offering that slots are scheduled against.
+
         `full_price` is in minor units.
       properties:
-        id: { type: string }
-        external_id: { type: [string, 'null'] }
-        name: { type: string }
-        description: { type: [string, 'null'] }
-        instructor: { type: [string, 'null'] }
-        format: { type: string, enum: [individual, group] }
+        id:
+          type: string
+        studio_id:
+          type: string
+          description: The studio this record belongs to. A key can act on every studio of its business; see
+            `GET /v1/studios`.
+        external_id:
+          type:
+            - string
+            - "null"
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        instructor:
+          type:
+            - string
+            - "null"
+        format:
+          type: string
+          enum:
+            - individual
+            - group
         category:
           type: string
-          enum: [yoga, pilates, reformer, stretching, massage, personal_training]
-        duration_min: { type: integer }
-        capacity: { type: integer }
-        full_price: { type: integer, description: Minor units (grosze) }
-        currency: { type: string, example: PLN }
-        default_discount_pct: { type: integer }
-        archived: { type: boolean }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+          enum:
+            - yoga
+            - pilates
+            - reformer
+            - stretching
+            - massage
+            - personal_training
+        duration_min:
+          type: integer
+        capacity:
+          type: integer
+        full_price:
+          type: integer
+          description: Minor units (grosze)
+        currency:
+          type: string
+          example: PLN
+        default_discount_pct:
+          type: integer
+        archived:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: svc_abc
+        studio_id: std_mokotow
+        external_id: studio-sku-101
+        name: Vinyasa Yoga
+        description: All levels, heated room.
+        instructor: Anna K.
+        format: group
+        category: yoga
+        duration_min: 60
+        capacity: 16
+        full_price: 4900
+        currency: PLN
+        default_discount_pct: 50
+        archived: false
+        created_at: 2026-10-20T08:00:00.000Z
+        updated_at: 2026-10-21T08:00:00.000Z
     ServiceInput:
       type: object
-      required: [external_id, name, format, category, duration_min, capacity, full_price]
+      required:
+        - external_id
+        - name
+        - format
+        - category
+        - duration_min
+        - capacity
+        - full_price
       properties:
-        external_id: { type: string, maxLength: 120 }
-        name: { type: string, minLength: 2, maxLength: 120 }
-        description: { type: string, maxLength: 2000 }
-        instructor: { type: string, maxLength: 120 }
-        format: { type: string, enum: [individual, group] }
+        studio_id:
+          type: string
+          description: Studio to create the service in. Required when the business has several studios; may be
+            omitted while it has one.
+        external_id:
+          type: string
+          maxLength: 120
+          description: Your own id for the service. Upsert key, unique per studio.
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
+        instructor:
+          type: string
+          maxLength: 120
+        format:
+          type: string
+          enum:
+            - individual
+            - group
         category:
           type: string
-          enum: [yoga, pilates, reformer, stretching, massage, personal_training]
-        duration_min: { type: integer, minimum: 5, maximum: 600 }
-        capacity: { type: integer, minimum: 1, maximum: 500 }
-        full_price: { type: integer, minimum: 0 }
-        default_discount_pct: { type: integer, minimum: 0, maximum: 100 }
+          enum:
+            - yoga
+            - pilates
+            - reformer
+            - stretching
+            - massage
+            - personal_training
+        duration_min:
+          type: integer
+          minimum: 5
+          maximum: 600
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 500
+        full_price:
+          type: integer
+          minimum: 0
+        default_discount_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+      example:
+        studio_id: std_mokotow
+        external_id: studio-sku-101
+        name: Vinyasa Yoga
+        description: All levels, heated room.
+        instructor: Anna K.
+        format: group
+        category: yoga
+        duration_min: 60
+        capacity: 16
+        full_price: 4900
+        default_discount_pct: 50
     ServiceUpdate:
       type: object
       properties:
-        name: { type: string, minLength: 2, maxLength: 120 }
-        description: { type: string, maxLength: 2000 }
-        instructor: { type: string, maxLength: 120 }
-        format: { type: string, enum: [individual, group] }
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
+        instructor:
+          type: string
+          maxLength: 120
+        format:
+          type: string
+          enum:
+            - individual
+            - group
         category:
           type: string
-          enum: [yoga, pilates, reformer, stretching, massage, personal_training]
-        duration_min: { type: integer, minimum: 5, maximum: 600 }
-        capacity: { type: integer, minimum: 1, maximum: 500 }
-        full_price: { type: integer, minimum: 0 }
-        default_discount_pct: { type: integer, minimum: 0, maximum: 100 }
-        archived: { type: boolean }
+          enum:
+            - yoga
+            - pilates
+            - reformer
+            - stretching
+            - massage
+            - personal_training
+        duration_min:
+          type: integer
+          minimum: 5
+          maximum: 600
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 500
+        full_price:
+          type: integer
+          minimum: 0
+        default_discount_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        archived:
+          type: boolean
     Slot:
       type: object
-      description: >
-        A dated, timed, bookable instance of a service. `availability.remaining` is
-        the live count of released seats still free.
+      description: A dated, timed, bookable instance of a service. `availability.remaining` is the live
+        count of released seats still free.
+
       properties:
-        id: { type: string }
-        external_id: { type: [string, 'null'] }
-        service_id: { type: string }
-        date: { type: string, format: date }
-        start_time: { type: string, example: '18:30' }
-        duration_min: { type: [integer, 'null'] }
-        capacity: { type: integer }
-        released_seats: { type: integer }
-        discount_pct: { type: [integer, 'null'] }
-        instructor: { type: [string, 'null'] }
-        room_name: { type: [string, 'null'] }
+        id:
+          type: string
+        studio_id:
+          type: string
+          description: The studio this record belongs to. A key can act on every studio of its business; see
+            `GET /v1/studios`.
+        external_id:
+          type:
+            - string
+            - "null"
+        service_id:
+          type: string
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          example: 18:30
+        duration_min:
+          type:
+            - integer
+            - "null"
+        capacity:
+          type: integer
+        released_seats:
+          type: integer
+        discount_pct:
+          type:
+            - integer
+            - "null"
+        instructor:
+          type:
+            - string
+            - "null"
+        room_name:
+          type:
+            - string
+            - "null"
         availability:
           type: object
           properties:
-            released: { type: integer }
-            booked: { type: integer }
-            remaining: { type: integer }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+            released:
+              type: integer
+            booked:
+              type: integer
+            remaining:
+              type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: slot_xyz
+        studio_id: std_mokotow
+        external_id: studio-event-55012
+        service_id: svc_abc
+        date: 2026-10-25
+        start_time: 18:30
+        duration_min: 60
+        capacity: 16
+        released_seats: 4
+        discount_pct: 50
+        instructor: Anna K.
+        room_name: Studio 2
+        availability:
+          released: 4
+          booked: 1
+          remaining: 3
+        created_at: 2026-10-21T08:00:00.000Z
+        updated_at: 2026-10-21T08:00:00.000Z
     SlotInput:
       type: object
-      required: [external_id, date, start_time, capacity, released_seats]
-      description: Provide either service_id or service_external_id.
+      required:
+        - external_id
+        - date
+        - start_time
+        - capacity
+        - released_seats
+      description: Provide either service_id or service_external_id. With `service_id` the slot is created
+        in that service's studio; with `service_external_id`, pass `studio_id` when the business has
+        several studios.
       properties:
-        external_id: { type: string, maxLength: 120 }
-        service_id: { type: string }
-        service_external_id: { type: string, maxLength: 120 }
-        date: { type: string, format: date }
-        start_time: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }
-        duration_min: { type: integer, minimum: 5, maximum: 600 }
-        capacity: { type: integer, minimum: 1, maximum: 500 }
-        released_seats: { type: integer, minimum: 0, maximum: 500 }
-        discount_pct: { type: integer, minimum: 0, maximum: 100 }
-        instructor: { type: string, maxLength: 120 }
-        room_name: { type: string, maxLength: 120 }
+        studio_id:
+          type: string
+          description: Studio of the slot. Optional with `service_id` (the slot follows its service, and a
+            different value returns `400 studio_mismatch`) or while the business has one studio.
+        external_id:
+          type: string
+          maxLength: 120
+          description: Your own id for the slot. Upsert key, unique per studio.
+        service_id:
+          type: string
+        service_external_id:
+          type: string
+          maxLength: 120
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          pattern: ^([01]\\d|2[0-3]):[0-5]\\d$
+        duration_min:
+          type: integer
+          minimum: 5
+          maximum: 600
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 500
+        released_seats:
+          type: integer
+          minimum: 0
+          maximum: 500
+        discount_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        instructor:
+          type: string
+          maxLength: 120
+        room_name:
+          type: string
+          maxLength: 120
+      example:
+        external_id: studio-event-55012
+        service_id: svc_abc
+        date: 2026-10-25
+        start_time: 18:30
+        duration_min: 60
+        capacity: 16
+        released_seats: 4
+        discount_pct: 50
+        instructor: Anna K.
+        room_name: Studio 2
     SlotUpdate:
       type: object
       properties:
-        date: { type: string, format: date }
-        start_time: { type: string, pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' }
-        duration_min: { type: integer, minimum: 5, maximum: 600 }
-        capacity: { type: integer, minimum: 1, maximum: 500 }
-        released_seats: { type: integer, minimum: 0, maximum: 500 }
-        discount_pct: { type: integer, minimum: 0, maximum: 100 }
-        instructor: { type: string, maxLength: 120 }
-        room_name: { type: string, maxLength: 120 }
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          pattern: ^([01]\\d|2[0-3]):[0-5]\\d$
+        duration_min:
+          type: integer
+          minimum: 5
+          maximum: 600
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 500
+        released_seats:
+          type: integer
+          minimum: 0
+          maximum: 500
+        discount_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        instructor:
+          type: string
+          maxLength: 120
+        room_name:
+          type: string
+          maxLength: 120
+      example:
+        released_seats: 6
     BulkResult:
       type: object
-      description: >
-        Per-row outcome of a POST /v1/schedule/bulk call. One row failing does not
-        roll back the others.
+      description: Per-row outcome of a POST /v1/schedule/bulk call. One row failing does not roll back
+        the others.
+
       properties:
         summary:
           type: object
           properties:
-            created: { type: integer }
-            updated: { type: integer }
-            failed: { type: integer }
-            total: { type: integer }
+            created:
+              type: integer
+            updated:
+              type: integer
+            failed:
+              type: integer
+            total:
+              type: integer
         results:
           type: array
           items:
             type: object
             properties:
-              external_id: { type: string }
-              status: { type: string, enum: [created, updated, error] }
-              id: { type: string }
-              error: { $ref: '#/components/schemas/Error' }
+              external_id:
+                type: string
+              status:
+                type: string
+                enum:
+                  - created
+                  - updated
+                  - error
+              id:
+                type: string
+              error:
+                $ref: "#/components/schemas/Error"
+      example:
+        summary:
+          created: 1
+          updated: 1
+          failed: 0
+          total: 2
+        results:
+          - external_id: studio-event-55012
+            status: updated
+            id: slot_xyz
+          - external_id: studio-event-55013
+            status: created
+            id: slot_pqr
     Booking:
       type: object
       description: Privacy-safe projection — first name and a booking code only.
       properties:
-        id: { type: string }
-        confirmation_code: { type: string, example: A1B2C3 }
-        status: { type: string, enum: [confirmed, cancelled, completed] }
-        customer_first_name: { type: string }
+        id:
+          type: string
+        studio_id:
+          type: string
+          description: The studio this record belongs to. A key can act on every studio of its business; see
+            `GET /v1/studios`.
+        confirmation_code:
+          type: string
+          example: A1B2C3
+        status:
+          type: string
+          enum:
+            - confirmed
+            - cancelled
+            - completed
+        customer_first_name:
+          type: string
         slot:
           type: object
           properties:
-            id: { type: string }
-            external_id: { type: [string, 'null'] }
-            service_id: { type: string }
-            date: { type: string, format: date }
-            start_time: { type: string }
-        amount: { type: [integer, 'null'], description: Minor units (grosze) }
-        currency: { type: [string, 'null'] }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+            id:
+              type: string
+            external_id:
+              type:
+                - string
+                - "null"
+            service_id:
+              type: string
+            date:
+              type: string
+              format: date
+            start_time:
+              type: string
+        amount:
+          type:
+            - integer
+            - "null"
+          description: Minor units (grosze)
+        currency:
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      example:
+        id: bk_789
+        studio_id: std_mokotow
+        confirmation_code: A1B2C3
+        status: confirmed
+        customer_first_name: Marta
+        slot:
+          id: slot_xyz
+          external_id: studio-event-55012
+          service_id: svc_abc
+          date: 2026-10-25
+          start_time: 18:30
+        amount: 2450
+        currency: PLN
+        created_at: 2026-10-21T17:03:00.000Z
+        updated_at: 2026-10-21T17:03:00.000Z
     WebhookEvent:
       type: object
-      description: >
-        The envelope delivered to your registered webhook URL. `id` is the event's own
+      description: The envelope delivered to your registered webhook URL. `id` is the event's own
         idempotency key — delivery is at-least-once, so ignore repeats.
       properties:
-        id: { type: string, example: booking.created.ckxxxxxx }
-        type: { type: string, enum: [booking.created, booking.cancelled] }
-        created_at: { type: string, format: date-time }
-        data: { $ref: '#/components/schemas/Booking' }
+        id:
+          type: string
+          example: booking.created.ckxxxxxx
+        type:
+          type: string
+          enum:
+            - booking.created
+            - booking.cancelled
+        created_at:
+          type: string
+          format: date-time
+        data:
+          $ref: "#/components/schemas/Booking"
+      example:
+        id: evt_01HXYZ
+        type: booking.created
+        created_at: 2026-10-21T17:03:00.100Z
+        data:
+          id: bk_789
+          studio_id: std_mokotow
+          confirmation_code: A1B2C3
+          status: confirmed
+          customer_first_name: Marta
+          slot:
+            id: slot_xyz
+            external_id: studio-event-55012
+            service_id: svc_abc
+            date: 2026-10-25
+            start_time: 18:30
+          amount: 2450
+          currency: PLN
+          created_at: 2026-10-21T17:03:00.000Z
+          updated_at: 2026-10-21T17:03:00.000Z
+    Studio:
+      type: object
+      description: A location of your business. Services, slots and bookings each belong to one studio.
+
+      properties:
+        id:
+          type: string
+          description: Pass this as `studio_id`.
+        name:
+          type: string
+        slug:
+          type:
+            - string
+            - "null"
+          description: "Public page key: takeslot.app/studios/{slug}"
+        city:
+          type: string
+        address:
+          type: string
+        timezone:
+          type: string
+          example: Europe/Warsaw
+        currency:
+          type: string
+          example: PLN
+      example:
+        id: std_mokotow
+        name: Studio Flow Mokotów
+        slug: studio-flow-mokotow
+        city: warsaw
+        address: ul. Puławska 24
+        timezone: Europe/Warsaw
+        currency: PLN
